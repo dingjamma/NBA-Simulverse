@@ -48,24 +48,48 @@ This is not a prop bet model. This is a basketball foundation model.
 
 ---
 
-## Data Strategy — Free & Official Only
+## Data Strategy — Free, Official, and Complete
 
-**All training data comes from official NBA stats APIs. No paid subscriptions.**
+**All training data is free. No paid subscriptions. We go back to 1947.**
 
-| Data Source | What It Provides | Cost |
-|-------------|-----------------|------|
-| stats.nba.com | Complete game logs, play-by-play, advanced stats, tracking data, 1996-present | Free |
-| BallDontLie API | Player stats, game logs, team data | Free tier (already integrated) |
-| NBA.com matchup data | Defensive matchups, lineup data | Free |
-| Google News RSS | News and headlines | Free |
-| ESPN RSS | NBA news | Free |
+### Primary Training Data
 
-**No paid APIs. No The Odds API for training data.** The odds crawler stays for the existing NBA-Player-Prop pipeline but is not part of the foundation model. The model trains on basketball reality — what actually happened — not on what bookmakers priced.
+| Data Source | What It Provides | Era Coverage | Cost |
+|-------------|-----------------|--------------|------|
+| Kaggle CC0 dataset (`eoinamoore/historical-nba-data-and-player-box-scores`) | Every player, every game, box scores + advanced stats | 1947–present | Free (CC0 public domain) |
+| nba_api | Ongoing nightly ingestion of current season | 2023–present | Free (rate-limited) |
+| Google News RSS | News and headlines | Live | Free |
+| ESPN RSS | NBA news | Live | Free |
 
-**Training data volume:**
-- ~450 active players/season × 82 games × 25 seasons = ~900K player-game records
-- 20-game sliding windows = millions of training sequences
-- All free. All official. All from stats.nba.com.
+**No paid APIs. No basketball-reference (ToS bans AI training). No BallDontLie stats tier ($9.99/month — not worth it).**
+
+### Era Architecture
+
+NBA basketball has evolved dramatically since 1947. The model must understand this. Every training sequence carries an **era embedding**:
+
+| Era | Years | Defining Characteristics |
+|-----|-------|--------------------------|
+| Pre-Shot Clock | 1947–1954 | Slow pace, low scoring, 8 original teams |
+| Shot Clock Era | 1954–1976 | Pace increases, ABA competition, expansion |
+| Showtime / Bird-Magic | 1977–1993 | Fast break basketball, dominance of big men and guards |
+| Jordan Era | 1994–2002 | Physical defense, isolation, 90s grit |
+| Post-Jordan Transition | 2003–2012 | Rise of analytics, pace-and-space begins |
+| Three-Point Revolution | 2013–present | Positionless basketball, pace at all-time high |
+
+The model is not expected to predict 1954 stats from 2024 patterns. Era embeddings let it understand that a 25-point game in 1957 means something different than a 25-point game in 2024. Temporal context is baked in, not ignored.
+
+### Why 1947?
+
+More data = better model. Early era games are noisy but structurally valid: fatigue, hot streaks, development arcs, and matchup dynamics are basketball universals that transcend era. The era embedding handles the distribution shift. A model trained on 78 years of basketball understands the game more deeply than one trained on 25.
+
+**Training data volume (confirmed — dataset already downloaded):**
+- `PlayerStatistics.csv` — 308 MB, every player-game box score 1947–present
+- `PlayerStatisticsAdvanced.csv` — 40 MB, advanced stats (PER, TS%, USG%, ORTG, DRTG)
+- `Games.csv` — 9 MB, game-level metadata (date, teams, arena, attendance)
+- `PlayByPlay.parquet` — 810 MB (future use — possession-level modeling, Phase 3+)
+- 20-game sliding windows → millions of training sequences
+- CC0 public domain — legal for ML training, commercial use, redistribution
+- nba_api for nightly top-up of current season (1 req/3-6 sec from home IP)
 
 ---
 
@@ -172,9 +196,9 @@ The foundation model is the statistical backbone. The LLM agents are the reasoni
 
 **Goal:** NBA-GPT trained on every player, every game, 2000-present. Free data only.
 
-- **Data ingestion** — stats.nba.com scraper + BallDontLie for complete game logs 2000-2025. Every player, every game: PTS, REB, AST, STL, BLK, FG3M, MIN, FGA, FGM, FTA, FTM, TO, PF, plus/minus, pace, opponent defensive rating, home/away, rest days, back-to-back flag, game number in season.
-- **Transformer architecture** — PyTorch encoder, input: 20-game sequence, output: predicted game 21 vector. Player embedding layer, temporal positional encoding, multi-head attention. Mixed precision (fp16) for RTX 4080.
-- **Training** — MSE loss, AdamW, cosine LR schedule. ~900K records, millions of sequences. Fully local on RTX 4080.
+- **Data ingestion** — Kaggle CC0 dataset as bulk historical load (1947–present) + nba_api for current season top-up. Every player, every game: PTS, REB, AST, STL, BLK, FG3M, MIN, FGA, FGM, FTA, FTM, TO, PF, plus/minus, pace, opponent defensive rating, home/away, rest days, back-to-back flag, game number in season, **era embedding**.
+- **Transformer architecture** — PyTorch encoder, input: 20-game sequence, output: predicted game 21 vector. Player embedding layer, era embedding layer, temporal positional encoding, multi-head attention. Mixed precision (fp16) for RTX 4080.
+- **Training** — MSE loss, AdamW, cosine LR schedule. ~1.5M+ records, millions of sequences. Fully local on RTX 4080.
 - **Validation** — beat XGBoost on held-out 2024-25 season on at least 4 of 6 stat categories.
 
 **Success criteria:**
