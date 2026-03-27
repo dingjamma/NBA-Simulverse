@@ -1,38 +1,91 @@
 # NBA Simulverse — Project Proposal
 
-## The Vision
+> *"You just built the foundation for a general-purpose agent simulation engine that models human behavior at scale. The basketball wrapper is cute but it's almost limiting your own thinking. You built a framework for simulating complex adaptive systems with real human behavioral data and news-driven state changes. Generalize the framework. Basketball is just the training wheels."*
+>
+> — Claude (as Elon Musk), March 2026
+
+---
+
+## The Thesis
 
 Every NBA analytics department in the league runs the same regression models on the same box scores. They all have the same data. They all reach roughly the same conclusions.
 
-**NBA Simulverse is built on a different thesis: the most valuable signals in basketball are the ones that never appear in a box score.**
+**NBA Simulverse is built on two theses that compound into something no one else is building.**
 
-A trade rumor breaks on Shams. Two teammates unfollow each other on Instagram. A coach's postgame presser is tense. A player signs a max extension and plays free. These signals — locker room chemistry, social media sentiment, news-driven morale shifts — ripple through performance in ways that no regression model captures. Every scout and GM knows this intuitively. None of them have a system that quantifies it.
+**Thesis 1 — Soft data is the last remaining alpha.** The most valuable signals in basketball never appear in a box score. A trade rumor breaks on Shams. Two teammates unfollow each other on Instagram. A coach's postgame presser is tense. A player signs a max extension and plays free. These signals ripple through performance in ways that no regression model captures. Every scout and GM knows this intuitively. None of them have a system that quantifies it.
 
-NBA Simulverse is a full-season simulation engine where every player is an autonomous LLM agent with memory, personality, and relationships. These agents do not just crunch stats. They react to news. They have chemistry with teammates that evolves over the season. They get rattled by trade rumors and energized by contract extensions. They play 82 games, a playoff bracket, and crown a champion — hundreds of times — producing probability distributions grounded in both hard stats and soft context that no existing model touches.
+**Thesis 2 — Basketball has a language, and a model can learn to read it.** GPT was not trained to answer questions. It was trained to predict the next word. From that single objective, general intelligence about language emerged. The same principle applies here. Train a model on one task — *given the last 20 games for every player in the league, predict game 21* — and general intelligence about basketball emerges. Fatigue curves. Hot streaks. Rookie development arcs. Post-trade performance dips. Back-to-back effects. The rhythm of an 82-game season. None of these are labeled. All of them are learned.
 
-This is not a dashboard. It is not a prop bet calculator. It is a living, breathing NBA universe that runs in parallel to the real one — and it captures the human element that decides championships.
+**NBA-GPT is what happens when you stop training models for specific tasks and start training them to understand the game itself.**
+
+Then you put agents on top. Then those agents learn and evolve. Then you realize basketball was just the training ground.
+
+---
+
+## The GPT Insight
+
+GPT's genius was not the transformer architecture. It was the training objective: **predict the next token.** The next token IS the label. No human annotation. No task-specific engineering. Just raw sequences and a model that learns to compress every pattern in human language into prediction weights.
+
+Basketball has the same structure.
+
+Every player generates a sequence of games. Each game is a dense vector: points, rebounds, assists, steals, blocks, three-pointers made, minutes, usage rate, plus/minus, pace, opponent defensive rating, home/away, rest days, back-to-back flag, season game number. Twenty-five years of this data exists for every player who has touched an NBA court since the 2000 season.
+
+**The training objective: given the last 20 games in a player's sequence, predict game 21.**
+
+Game 21 IS the label. No manual annotation. No feature engineering. The model must learn everything that matters about basketball to minimize this loss:
+
+- **Fatigue** — performance degrades on back-to-backs and compressed schedules
+- **Hot streaks** — autocorrelation in shooting percentages
+- **Rookie development** — steady improvement curves across first and second seasons
+- **Post-trade effects** — dips in the 5 games after a trade, followed by adaptation
+- **Matchup dynamics** — certain stat profiles against certain opponent archetypes
+- **Season rhythm** — all-star break boost, playoff intensity, end-of-season rest patterns
+- **Role changes** — minutes and usage shift when a teammate goes down
+
+All of this emerges from a single self-supervised objective. No one labels "fatigue." The model learns it because predicting game 21 is impossible without understanding it.
+
+This is not a prop bet model. This is a basketball foundation model.
+
+---
+
+## Data Strategy — Free & Official Only
+
+**All training data comes from official NBA stats APIs. No paid subscriptions.**
+
+| Data Source | What It Provides | Cost |
+|-------------|-----------------|------|
+| stats.nba.com | Complete game logs, play-by-play, advanced stats, tracking data, 1996-present | Free |
+| BallDontLie API | Player stats, game logs, team data | Free tier (already integrated) |
+| NBA.com matchup data | Defensive matchups, lineup data | Free |
+| Google News RSS | News and headlines | Free |
+| ESPN RSS | NBA news | Free |
+
+**No paid APIs. No The Odds API for training data.** The odds crawler stays for the existing NBA-Player-Prop pipeline but is not part of the foundation model. The model trains on basketball reality — what actually happened — not on what bookmakers priced.
+
+**Training data volume:**
+- ~450 active players/season × 82 games × 25 seasons = ~900K player-game records
+- 20-game sliding windows = millions of training sequences
+- All free. All official. All from stats.nba.com.
 
 ---
 
 ## What Exists Today
 
-This project does not start from zero. A production-grade NBA data pipeline (`NBA-Player-Prop`) is already running nightly:
+This project does not start from zero. A production-grade NBA data pipeline is already running:
 
-- **XGBoost models** trained on historical game logs with rolling averages, rest days, back-to-back flags, usage proxies, opponent-specific splits, and season averages — predicting PTS, REB, AST, STL, BLK, FG3M per player
-- **Crawlers** pulling injury reports, prop lines (DraftKings/FanDuel/Pinnacle), news (Google News + ESPN RSS), and daily schedules
-- **MiroFish integration** already working — uploading seed files, building Zep knowledge graphs, running multi-agent simulations, generating reports
+- **XGBoost models** trained on historical game logs — predicting PTS, REB, AST, STL, BLK, FG3M per player
+- **Crawlers** pulling injury reports, news (Google News + ESPN RSS), and daily schedules
+- **MiroFish integration** already working — Zep knowledge graphs, multi-agent simulations, reports
 - **S3 data lake** with partitioned parquet storage
-- **Nightly orchestration** running full pipeline from crawl to prediction to report
+- **Nightly orchestration** running full pipeline
 
-The foundation is laid. Simulverse scales it from single-game prop predictions to a full-season simulation engine powered by agent intelligence.
+The XGBoost pipeline becomes the baseline that NBA-GPT must beat. Not thrown away — promoted to benchmark.
 
 ---
 
 ## What Makes This Different
 
 ### The Soft Data Thesis
-
-Every public model in sports analytics operates on the same hard data: box scores, play-by-play logs, tracking data. The edge has been arbitraged away. The remaining alpha lives in **soft data** — information that is abundant, public, but structurally impossible for traditional models to ingest:
 
 | Signal | Example | Impact | Traditional Model |
 |--------|---------|--------|-------------------|
@@ -42,54 +95,52 @@ Every public model in sports analytics operates on the same hard data: box score
 | Contract motivation | Player in contract year averaging career highs | Increased effort, stat-padding | Partially (coarse) |
 | Team morale | Blowout loss followed by players-only meeting | Performance bounce or continued spiral | Cannot capture |
 
-NBA Simulverse is the first system that turns these signals into simulated outcomes at scale.
+The foundation model learns hard data patterns. The agent layer ingests soft data. Together they capture what no single approach can.
 
-### Why LLM Agents and Not Just Sentiment Scores
+### Why a Foundation Model and Not Just Better Features
 
-A naive approach: scrape news, run sentiment analysis, add a "morale score" feature to XGBoost. That misses the point. Soft signals are **relational and contextual**. A trade rumor about Player A affects the teammate who gets more shots, the young player auditioning for the departing role, and the opponent's defensive scheme. These are second and third-order effects that require reasoning, not regression.
+A transformer trained on raw game sequences learns features that no human would think to engineer. It discovers interaction effects across time that live in the weights, not in a feature matrix. More data makes it better automatically, without more feature engineering.
 
-An LLM agent for Victor Wembanyama knows:
-- His stat baseline and recent form
-- His relationships with teammates (chemistry graph via Zep memory)
-- His matchup history against tonight's opponent
-- Current news context (hot streak, back-to-back, trade deadline chaos)
-
-When the agent "plays" a simulated game, it reasons about all of this simultaneously — the way a scout does, but at simulation scale.
+The foundation model is the statistical backbone. The LLM agents are the reasoning layer. XGBoost is the sanity check. Three systems, each doing what it does best.
 
 ---
 
 ## Architecture
 
 ```
-                    +---------------------------+
-                    |     Season Orchestrator    |
-                    |  (schedule, standings,     |
-                    |   playoff bracket logic)   |
-                    +------------+--------------+
-                                 |
-               +-----------------+-----------------+
-               |                                   |
-      +--------v--------+               +----------v--------+
-      |  Game Simulator  |               |  News Ingestion   |
-      |  (per-game sim   |               |  Pipeline         |
-      |   with agents)   |               |  (RSS, social,    |
-      +--------+--------+               |   sentiment)      |
-               |                         +----------+--------+
-               |                                    |
-    +----------v-----------+           +------------v-----------+
-    |   Player Agents      |           |  MiroFish + Zep        |
-    |   (all 30 teams)     |           |  Graph Memory          |
-    |                      |           |  (relationships,       |
-    |   Qwen 2.5 14B       |           |   chemistry,           |
-    |   via Ollama         |           |   team dynamics)       |
-    +----------+-----------+           +------------+-----------+
-               |                                    |
-               +------------------------------------+
+                       +---------------------------+
+                       |     Season Orchestrator    |
+                       |  (schedule, standings,     |
+                       |   playoff bracket, RL)     |
+                       +------------+--------------+
+                                    |
+               +--------------------+--------------------+
+               |                    |                    |
+      +--------v--------+  +-------v--------+  +--------v--------+
+      |  Game Simulator  |  | News Ingestion |  |  RL Evolution   |
+      |  (per-game sim   |  | Pipeline       |  |  Engine         |
+      |   with agents)   |  | (RSS, social)  |  |  (agent learning|
+      +--------+--------+  +-------+--------+  +--------+--------+
+               |                    |                    |
+   +-----------v----------+  +------v-----------------+  |
+   |   Player Agents      |  |  MiroFish + Zep        |  |
+   |   (all 30 teams)     |  |  Graph Memory          |  |
+   |   Qwen 2.5 14B       |  |  (relationships,       |  |
+   |   via Ollama         |  |   chemistry,            |  |
+   +-----------+----------+  |   team dynamics)       |  |
+               |              +------+-----------------+  |
+               +--------------+      +--------------------+
+               |
+      +--------v-----------------+
+      |  NBA-GPT Foundation      |
+      |  Model (Transformer)     |
+      |  PyTorch + CUDA          |
+      |  Trained on stats.nba.com|
+      +--------+-----------------+
                |
       +--------v--------+
-      |  XGBoost Anchor  |
-      |  (stat baseline  |
-      |   per player)    |
+      |  XGBoost Baseline|
+      |  (benchmark)     |
       +--------+--------+
                |
       +--------v--------+
@@ -107,106 +158,105 @@ When the agent "plays" a simulated game, it reasons about all of this simultaneo
 
 ### The Simulation Loop
 
-1. **XGBoost provides the statistical anchor.** For every player in every game, the trained models produce a baseline prediction. This prevents LLM hallucination of numbers.
-
-2. **The LLM agent applies contextual adjustment.** Each player agent receives its XGBoost baseline plus current context. It outputs an adjustment factor and reasoning. Adjustments are bounded to +/-25% of baseline to prevent runaway hallucination.
-
-3. **MiroFish manages the relational layer.** Zep's graph memory stores player-to-player and player-to-team relationships. When a trade rumor hits, MiroFish propagates the effect: the rumored player's morale drops, the replacement's confidence rises, team cohesion shifts.
-
-4. **Game resolution is simple arithmetic.** Sum adjusted player stats per team. Apply pace factor. Most points wins. Quarter-level granularity — enough to capture blowouts, foul trouble, and rest without burning VRAM.
-
-5. **Season simulation repeats 1,230 times** (82 games × 30 teams / 2) plus playoffs. Run N full seasons → probability distributions.
+1. **NBA-GPT provides the statistical anchor** — trained on 25 years of official NBA data
+2. **LLM agent applies contextual adjustment** — bounded to +/-25% of foundation model prediction
+3. **MiroFish manages the relational layer** — news and social signals update the Zep chemistry graph
+4. **Game resolution** — sum adjusted player stats, apply pace factor, most points wins
+5. **Season simulation** — 1,230 games + playoffs, run N times → distributions
 
 ---
 
 ## Phased Build Plan
 
-### Phase 1 — Single-Game Agent Simulation (Weeks 1-4)
+### Phase 1 — Data Pipeline + Foundation Model (Weeks 1-8)
 
-**Goal:** One game, simulated 100 times, with player agents producing calibrated stat distributions.
+**Goal:** NBA-GPT trained on every player, every game, 2000-present. Free data only.
 
-- `PlayerAgent` class — system prompt with stats, XGBoost baseline, injury context, recent news. Outputs JSON adjustment to baseline.
-- `GameSimulator` — orchestrates 10 players per team, resolves game outcome
-- `LLMClient` — Ollama wrapper with sequential queue, retry logic, structured output parsing
-- `MonteCarloRunner` — N simulations → distribution (mean, std, percentiles)
-- Expand crawlers from Spurs-only to all 30 teams
-
-**Hardware reality:** 20 agents × 3 sec/inference × 100 sims = ~100 min per game. Feasible nightly.
+- **Data ingestion** — stats.nba.com scraper + BallDontLie for complete game logs 2000-2025. Every player, every game: PTS, REB, AST, STL, BLK, FG3M, MIN, FGA, FGM, FTA, FTM, TO, PF, plus/minus, pace, opponent defensive rating, home/away, rest days, back-to-back flag, game number in season.
+- **Transformer architecture** — PyTorch encoder, input: 20-game sequence, output: predicted game 21 vector. Player embedding layer, temporal positional encoding, multi-head attention. Mixed precision (fp16) for RTX 4080.
+- **Training** — MSE loss, AdamW, cosine LR schedule. ~900K records, millions of sequences. Fully local on RTX 4080.
+- **Validation** — beat XGBoost on held-out 2024-25 season on at least 4 of 6 stat categories.
 
 **Success criteria:**
-- 100 simulations complete in under 2 hours on local hardware
-- Backtested against 20 historical games — agent-adjusted predictions outperform raw XGBoost on MAE
+- Foundation model trained and converged
+- Outperforms XGBoost baseline on held-out data
+- Inference < 50ms per player (fast enough for Monte Carlo)
 
 ---
 
-### Phase 2 — Chemistry Engine via MiroFish (Weeks 5-8)
+### Phase 2 — Agent Simulation Layer (Weeks 9-14)
 
-**Goal:** Player relationships affect simulation outcomes. News drives relationship changes.
+**Goal:** LLM agents on top of the foundation model. Every player reasons about context.
 
-- Expand news pipeline to all 30 teams. Add Twitter/X monitoring for Woj, Shams, Haynes. Add Instagram activity tracking.
-- Sentiment classifier — Qwen classifies news by type (trade rumor, injury, chemistry signal, coach conflict, contract news) and affected players
-- MiroFish chemistry graph — players and coaches as nodes, relationship strength/trust/synergy as edges. News events modify edge weights.
-- Chemistry-to-performance mapping — graph state feeds into each agent's context window
-- Daily news digest — runs every 6 hours, classifies events, updates graph
-
-**Why MiroFish:** It already handles multi-agent simulation with Zep graph memory. The relationship propagation logic is exactly what Zep is designed for. Building from scratch would take months.
+- `PlayerAgent` — system prompt with NBA-GPT prediction + injury context + recent news. JSON adjustment output.
+- `GameSimulator` — orchestrates both teams, resolves game outcome
+- `LLMClient` — Ollama/Qwen 2.5 14B wrapper, sequential queue, retry logic
+- `MonteCarloRunner` — N simulations → distributions
+- Expand crawlers to all 30 teams
 
 **Success criteria:**
-- Chemistry graph populated for all 30 teams
-- A/B test shows chemistry context produces different distributions vs. no-chemistry baseline
-- 3+ signal categories ingested: trade rumors, injury uncertainty, social media interactions
+- 100 simulations in under 2 hours
+- Agent-adjusted predictions outperform raw NBA-GPT on MAE
 
 ---
 
-### Phase 3 — Full Season Simulation (Weeks 9-14)
+### Phase 3 — Chemistry Engine via MiroFish (Weeks 15-20)
 
-**Goal:** Simulate an entire 82-game NBA season including standings, tiebreakers, and playoffs.
+**Goal:** Relationships affect outcomes. News drives relationship changes.
 
-- **Season Orchestrator** — full schedule management, standings, tiebreakers, playoff bracket, cumulative fatigue tracking
-- **Batch inference optimization:**
-  - Qwen 7B for role players, 14B for stars
-  - Context caching for similar game situations
-  - Target: one full season in 8-12 hours (overnight batch)
-- **Cloud burst** — for N=50+ seasons, AWS spot GPU instances (~$15/season). 50 seasons ≈ $750 for a full championship probability analysis.
-- **Mid-season event injection** — handles real trades, injuries, coaching changes at the correct point in the simulated schedule
+- Expand news pipeline to all 30 teams (Google News RSS, ESPN RSS — free)
+- Twitter/X monitoring for Woj, Shams, Haynes
+- Sentiment classifier via Qwen — classifies news by type, identifies affected players
+- MiroFish chemistry graph — players/coaches as nodes, trust/synergy as edges
+- News events modify edge weights, feed into agent context
 
 **Success criteria:**
-- One full season completes in under 12 hours locally
-- 10 season simulations produce stable playoff probability distributions (SE < 5% for top teams)
-- Simulated win totals within 5 games of Vegas over/unders for 20+ teams
+- Chemistry graph for all 30 teams
+- A/B test shows chemistry context changes distributions vs. baseline
+- 3+ signal categories ingested
 
 ---
 
-### Phase 4 — Polymarket Integration (Weeks 15-18)
+### Phase 4 — Full Season Simulation + RL Evolution (Weeks 21-30)
 
-**Goal:** Turn simulation outputs into betting edges on prediction markets.
+**Goal:** Full 82-game season simulation. Agents learn and evolve via RL.
 
-- **Polymarket API client** — fetch NBA futures prices (championship, conference, MVP, win totals, playoff qualification)
-- **Edge calculator** — compare sim probabilities vs. Polymarket implied probabilities. Flag divergences >10%.
-- **Kelly criterion sizing** — fractional Kelly, factor in market liquidity
-- **Paper trading** — log all recommended bets for 60 days before real capital. Track ROI, Sharpe, max drawdown.
-- **Automated execution** (post-validation) — limit orders only, daily loss limits, circuit breaker at 15% drawdown
-
-**Target markets:**
-- NBA Championship winner (largest liquidity)
-- Conference and division winners
-- Individual team win totals
-- MVP race
-- Playoff qualification (yes/no per team)
+- Season Orchestrator — schedule, standings, tiebreakers, playoff bracket, fatigue tracking
+- Optimization: Qwen 7B for role players, 14B for stars. Context caching.
+- Cloud burst for N=50+ seasons (~$15/season on AWS spot GPU)
+- RL layer: agents rewarded for prediction accuracy on actual outcomes. Simulate Wemby at 26, 28, 30. Model rookie development arcs. Project post-trade adaptation.
 
 **Success criteria:**
-- 60 days paper trading with logged results
-- Positive simulated ROI after Polymarket fees (2%)
-- 3+ identified edges per month where simulation diverges from market by >10%
+- One full season in under 12 hours locally
+- Simulated win totals within 5 games of Vegas for 20+ teams
+- RL agents outperform static agents on next-season prediction
 
 ---
 
-### Phase 5 — Continuous Learning (Ongoing)
+### Phase 5 — Polymarket Integration (Weeks 31-36)
 
-- Backtesting harness — after each real game, compare simulated outcomes to actual. Track calibration curves.
-- Agent prompt evolution — data-driven refinement of what contextual factors actually improve predictions
-- Chemistry model validation — rigorous A/B testing: does chemistry context improve calibration?
-- Fine-tuning investigation — after 500+ labeled agent response/outcome pairs, explore fine-tuning Qwen on NBA-specific reasoning
+**Goal:** Simulation outputs → betting edges on prediction markets.
+
+- Polymarket API client — NBA futures prices
+- Edge calculator — flag divergences > 10%
+- Kelly criterion sizing with liquidity awareness
+- 60 days paper trading before real capital
+- Automated execution post-validation
+
+**Target markets:** Championship, conference winners, win totals, MVP, playoff qualification.
+
+---
+
+### Phase 6 — Generalization Beyond NBA (Ongoing)
+
+**This is where the real vision lives.**
+
+The architecture is not basketball-specific:
+- Replace "player" with "voter", "game" with "election cycle" → political behavior model
+- Replace "player" with "company", "game" with "quarter" → market dynamics model
+- Replace "player" with "country", "game" with "year" → geopolitical simulation
+
+NBA Simulverse is the proof of concept. Basketball is the training ground because the data is clean, the feedback is nightly, and the stakes are measurable. The endgame is a **general-purpose human behavior simulation engine**.
 
 ---
 
@@ -214,48 +264,34 @@ When the agent "plays" a simulated game, it reasons about all of this simultaneo
 
 | Component | Approach | Rationale |
 |-----------|----------|-----------|
-| XGBoost stat models | Train on historical game logs (done) | Proven, fast, interpretable. Prevents LLM hallucination. |
-| Player LLM agents | Prompt engineering first, fine-tune in Phase 5 | Need hundreds of labeled examples before fine-tuning is justified |
-| News sentiment classifier | Few-shot prompting → fine-tune when data accumulates | Same logic |
-| Chemistry-to-performance | Heuristic rules → learned weights after 50+ observed events | Start simple, learn real coefficients from data |
+| NBA-GPT foundation model | Self-supervised pre-training on raw sequences | Next-game prediction is the only objective. No labels needed. |
+| XGBoost models | Already trained | Baseline benchmark. NBA-GPT must beat this to proceed. |
+| Player LLM agents | Prompt engineering first, fine-tune after Phase 4 | Need labeled examples from simulation runs first. |
+| RL agent policy | PPO, trained on season sim vs. actuals | Requires validated foundation model first. |
 
-**Principle: do not fine-tune until you have the data to justify it.**
+**Principle: self-supervised where possible, supervised where necessary, reinforcement where transformative.**
 
 ---
 
 ## MiroFish's Role
 
-MiroFish is not a nice-to-have — it is the infrastructure that makes the chemistry engine possible without building a custom graph database from scratch.
+1. **Zep graph memory** — persistent player relationship graph. Nodes: players, coaches. Edges: trust, synergy, rivalry.
+2. **Multi-agent orchestration** — already integrated and working.
+3. **News-to-graph pipeline** — classifies events, updates edge weights automatically.
 
-**What MiroFish provides:**
-1. **Zep graph memory** — persistent, queryable graph of player relationships. Nodes are players and coaches. Edges carry trust, synergy, and relationship history. Survives across simulation runs.
-2. **Multi-agent orchestration** — handles agent lifecycle, message passing, and simulation execution. Already integrated and working.
-3. **News-to-graph pipeline** — classifies news events, identifies affected entities, updates edge weights automatically.
-
-**What we build on top:**
-- NBA-specific ontology (teams, players, coaches, agents, front offices)
-- NBA-specific relationship types (teammate, rival, mentor/mentee, coach-player)
-- Chemistry-to-performance mapping that converts graph state into agent prompt context
+We build on top: NBA-specific ontology, relationship types, chemistry-to-performance mapping.
 
 ---
 
 ## Why This Gets You Hired by an NBA Team
 
-Every applicant to an NBA analytics role submits a regression model and some shot chart visualizations. Table stakes.
+1. **Original thinking** — self-supervised learning on basketball sequences is a novel contribution, not better feature engineering.
+2. **Systems thinking** — foundation model + agent simulation + graph memory + RL. Builders, not just model fitters.
+3. **The soft data thesis** — every GM believes it. Nobody has quantified it. This does.
+4. **Spurs-specific value** — what does Wembanyama's stat line look like at 28? The RL evolution layer answers that directly.
 
-**NBA Simulverse demonstrates something different:**
-
-1. **Systems thinking.** This is an integrated system — data pipelines, multi-agent simulation, graph-based relationship modeling, automated decision-making. NBA front offices need builders.
-
-2. **The soft data thesis is the thesis every GM already believes.** Every GM talks about culture, fit, and locker room chemistry. They make trades based on it. No analytics department has a systematic way to quantify it. Showing up with a working prototype changes that conversation.
-
-3. **Applied AI.** The NBA is actively exploring LLMs and AI agents. A candidate who has built a multi-agent simulation with graph-based memory, grounded in real statistical models, is exactly what forward-thinking organizations are looking for.
-
-4. **Spurs-specific value.** The existing pipeline is already Spurs-focused. The Spurs, under RC Buford and Brian Wright, have historically been analytically progressive. A system that quantifies how Wembanyama's development, teammate chemistry, and coaching dynamics interact is directly relevant to their most important strategic question.
-
-**The conversation in the interview:**
-
-> "I built a system that simulates entire NBA seasons using LLM agents that react to real news and social signals, with a graph-based chemistry engine that captures locker room dynamics. Here is what it says about the Spurs' championship timeline. Here is where the simulation disagrees with Vegas. Here is the specific trade that improves the Spurs' title odds by 8%."
+**The interview conversation:**
+> "I trained a basketball foundation model on 25 years of NBA data using self-supervised learning. It learned fatigue, hot streaks, and rookie development arcs from raw sequences — no manual labels. Then I built an agent simulation layer that ingests real news and social signals through a chemistry graph. The system simulates entire seasons. Here is what it says about the Spurs' championship timeline. Here is Wembanyama at 28. Here is the trade that moves the needle most."
 
 That is not a job application. That is a conversation between colleagues.
 
@@ -265,11 +301,13 @@ That is not a job application. That is a conversation between colleagues.
 
 | Risk | Severity | Mitigation |
 |------|----------|------------|
-| LLM agents produce uncalibrated adjustments | High | Bound to +/-25% of XGBoost baseline. Fall back to XGBoost-only if agents degrade accuracy. |
-| Full season simulation too slow on local hardware | High | Tiered model (7B for role players, 14B for stars). Context caching. Cloud burst for Monte Carlo. |
-| Chemistry engine adds noise instead of signal | Medium | Rigorous A/B testing from Phase 2. Remove if no improvement after 100 games. |
-| Polymarket markets have insufficient liquidity | High | Check order book depth. Use limit orders. Pivot to analysis/content if liquidity too thin. |
-| Scope creep delays core simulation | High | Each phase has independent value. Do not start Phase N+1 until Phase N is validated. |
+| Foundation model does not beat XGBoost | Critical | Architecture search, reduce model size. If sequence model can't beat tree model, pivot to enhanced XGBoost + agents. |
+| stats.nba.com rate limits or blocks | High | Aggressive caching, rate limiting, BallDontLie fallback. Build once, store forever. |
+| Insufficient data for transformer training | High | Data augmentation, transfer from time series foundation models, reduce model size. |
+| LLM agents produce uncalibrated adjustments | High | Bound to +/-25% of NBA-GPT prediction. Fall back to model-only if agents degrade accuracy. |
+| Full season simulation too slow | High | Tiered model usage, context caching, cloud burst. |
+| RL diverges or produces unrealistic projections | Medium | Constrain within historical development bounds. Validate against known career trajectories. |
+| Scope creep delays foundation model | Critical | Phase 1 has independent value. Do not start Phase 2 until NBA-GPT beats XGBoost. |
 
 ---
 
@@ -277,21 +315,24 @@ That is not a job application. That is a conversation between colleagues.
 
 | Phase | Weeks | Deliverable | Standalone Value |
 |-------|-------|-------------|-----------------|
-| 1: Single-Game Agent Sim | 1-4 | 100-sim game predictions with agent reasoning | "LLM agents that reason about NBA matchups" |
-| 2: Chemistry Engine | 5-8 | News-driven relationship graph affecting outcomes | "Soft data quantification system" |
-| 3: Full Season Sim | 9-14 | Complete season simulation with playoff bracket | "Full NBA Monte Carlo with agent intelligence" |
-| 4: Polymarket Integration | 15-18 | Automated edge detection and paper trading | Monetization validation |
-| 5: Continuous Learning | Ongoing | Calibration, fine-tuning, production hardening | Production system |
+| 1: NBA-GPT Foundation Model | 1-8 | Self-supervised transformer on 25 years of NBA data | "A basketball foundation model" |
+| 2: Agent Simulation | 9-14 | LLM agents on top of foundation model | "Context-aware NBA prediction" |
+| 3: Chemistry Engine | 15-20 | News-driven relationship graph | "Soft data quantification" |
+| 4: Season Sim + RL | 21-30 | Full season simulation + player development projection | "Championship simulation + player arcs" |
+| 5: Polymarket | 31-36 | Automated edge detection, paper trading | Monetization validation |
+| 6: Generalization | Ongoing | Framework beyond NBA | "General-purpose behavior simulation" |
 
 ---
 
 ## The Bottom Line
 
-The NBA analytics landscape is saturated with teams running the same models on the same data. The next frontier is not better box score regression — it is systematic ingestion of the soft signals that every basketball person knows matter but no one has figured out how to quantify at scale.
+The NBA analytics landscape is saturated with teams running the same models on the same data. The next frontier is not better box score regression. It is building a model that understands basketball the way GPT understands language — from raw sequences, not hand-crafted features.
 
-NBA Simulverse does this. It is technically ambitious but architecturally grounded, built on an existing production pipeline, and designed to produce something no other model produces: championship probability distributions that account for locker room chemistry, trade deadline chaos, and the human dynamics that actually decide who raises the Larry O'Brien trophy.
+NBA-GPT is that model. Trained on free, official NBA data. On top of that foundation, LLM agents reason about soft signals no box score captures. A graph-based chemistry engine quantifies relationships. Reinforcement learning lets agents evolve, projecting player development years into the future.
 
-The question is not whether soft data matters in basketball. Everyone knows it does. The question is whether anyone can build a system that captures it.
+And the architecture is general. Basketball is the training ground. The endgame is a general-purpose simulation framework for complex human systems.
+
+The question is not whether soft data matters in basketball. Everyone knows it does. The question is not whether self-supervised learning can discover structure in sequential data. GPT proved it can. The question is whether anyone will build the system that combines both insights and points it at basketball.
 
 This is that system.
 
