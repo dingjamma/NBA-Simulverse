@@ -204,7 +204,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--top",  type=int, default=3, help="Number of top picks to log")
     parser.add_argument("--date", type=str, default=None,
-                        help="Game date YYYYMMDD (default: tomorrow)")
+                        help="Game date YYYYMMDD (default: today ET)")
     parser.add_argument("--min-edge", type=float, default=1.0,
                         help="Minimum |edge| to include a pick")
     args = parser.parse_args()
@@ -213,9 +213,12 @@ def main():
         game_date = args.date
         display_date = f"{game_date[:4]}-{game_date[4:6]}-{game_date[6:]}"
     else:
-        tomorrow     = datetime.now(timezone.utc) + timedelta(days=1)
-        game_date    = tomorrow.strftime("%Y%m%d")
-        display_date = tomorrow.strftime("%Y-%m-%d")
+        # ESPN buckets games by Eastern Time date. Use ET today so late-night
+        # games (e.g. 10pm ET tipping into UTC tomorrow) stay in the right slate.
+        ET = timezone(timedelta(hours=-4))  # EDT (UTC-4); adjust to -5 in winter
+        today_et     = datetime.now(ET)
+        game_date    = today_et.strftime("%Y%m%d")
+        display_date = today_et.strftime("%Y-%m-%d")
 
     print(f"\n{'='*60}")
     print(f"NBA Daily Picks — {display_date}")
