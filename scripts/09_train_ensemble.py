@@ -37,7 +37,7 @@ def train_one(seed: int, norm_stats: dict, train_loader, val_loader) -> float:
     trainer = Trainer(model, train_loader, val_loader, cfg=cfg)
     history = trainer.train()
     best = min(history["val_loss"])
-    print(f"\n[seed={seed}] Best val loss: {best:.4f} → {ckpt_dir}/best.pt\n")
+    print(f"\n[seed={seed}] Best val loss: {best:.4f} -> {ckpt_dir}/best.pt\n")
     return best
 
 
@@ -50,7 +50,7 @@ def main():
 
     seeds = args.seeds if args.seeds else list(range(42, 42 + args.n_models))
     print(f"Training ensemble of {len(seeds)} models: seeds={seeds}")
-    print(f"Checkpoints → {ENSEMBLE_DIR}/seed_N/best.pt\n")
+    print(f"Checkpoints -> {ENSEMBLE_DIR}/seed_N/best.pt\n")
 
     norm_stats = load_norm_stats()
     train_loader, val_loader, _ = create_dataloaders(norm_stats=norm_stats,

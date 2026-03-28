@@ -11,3 +11,7 @@ A full NBA season simulation engine where every player is an autonomous LLM agen
 **The soft data thesis:** The most valuable signals in basketball never appear in a box score. NBA Simulverse is the first system that quantifies them at scale.
 
 See [`docs/PROPOSAL.md`](docs/PROPOSAL.md) for the full vision.
+
+## Known Limitations
+
+**Career Arc model (Phase 4):** MAE degrades for outlier elite players (30+ ppg) due to small sample size — approximately 50 such players exist in the historical training data. The model regresses predictions toward the population mean (≈11.7 ppg), causing it to underestimate peaks for ascending stars (e.g., Luka Doncic) and miss catastrophic injury-driven collapses (e.g., Derrick Rose). Attempted fixes (momentum features, player-tier embeddings) did not improve results. Shipped as-is; fix requires targeted oversampling or a separate model trained exclusively on elite-tier trajectories.

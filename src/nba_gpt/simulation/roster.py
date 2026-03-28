@@ -113,11 +113,11 @@ def _get_team_roster(
         if len(pid_rows) < min_games:
             continue
         if "firstName" in pid_rows.columns:
-        fname = str(pid_rows["firstName"].iloc[-1] or "").strip()
-        lname = str(pid_rows["lastName"].iloc[-1] or "").strip()
-        name = f"{fname} {lname}".strip() or str(pid)
-    else:
-        name = str(pid)
+            fname = str(pid_rows["firstName"].iloc[-1] or "").strip()
+            lname = str(pid_rows["lastName"].iloc[-1] or "").strip()
+            name = f"{fname} {lname}".strip() or str(pid)
+        else:
+            name = str(pid)
         avg_min = pd.to_numeric(pid_rows["numMinutes"], errors="coerce").dropna().tail(10).mean()
         if avg_min < 5:  # skip deep bench (<5 min/game)
             continue

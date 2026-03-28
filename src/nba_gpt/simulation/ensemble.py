@@ -81,7 +81,7 @@ class EnsemblePredictor:
                 era_id.to(self.device),
                 input_seq.to(self.device),
                 next_game_ctx.to(self.device),
-            ).float().cpu().numpy()
+            ).float().detach().cpu().numpy()
             all_preds.append(pred)
 
         all_preds = np.stack(all_preds)  # (n_members, batch, n_targets)

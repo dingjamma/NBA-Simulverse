@@ -252,7 +252,7 @@ def simulate(
         # Synthesize samples array from ensemble stats for consistent downstream API
         n_members = predictor.n_members
         member_actuals = np.stack([
-            m(player_id_t, era_id_t, input_seq_t, next_game_ctx_t).float().cpu().numpy()[0] + window_mean
+            m(player_id_t, era_id_t, input_seq_t, next_game_ctx_t).float().detach().cpu().numpy()[0] + window_mean
             for m in predictor.models
         ])
         samples = np.clip(member_actuals, 0, None)  # (n_members, n_targets)
