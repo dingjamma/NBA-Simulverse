@@ -55,7 +55,7 @@ PP_HEADERS = {"User-Agent": "Mozilla/5.0"}
 # ---------------------------------------------------------------------------
 
 def get_games(date_str: str) -> list[dict]:
-    """Return list of {home_team, away_team} for date_str (YYYYMMDD)."""
+    """Return list of {home, away, home_abbr, away_abbr} for date_str (YYYYMMDD)."""
     r = requests.get(
         f"{ESPN_BASE}/scoreboard",
         params={"dates": date_str},
@@ -67,9 +67,11 @@ def get_games(date_str: str) -> list[dict]:
     for ev in r.json().get("events", []):
         comps = ev.get("competitions", [{}])[0]
         teams = comps.get("competitors", [])
-        home = next((t["team"]["displayName"] for t in teams if t.get("homeAway") == "home"), "")
-        away = next((t["team"]["displayName"] for t in teams if t.get("homeAway") == "away"), "")
-        games.append({"home": home, "away": away})
+        home      = next((t["team"]["displayName"]  for t in teams if t.get("homeAway") == "home"), "")
+        away      = next((t["team"]["displayName"]  for t in teams if t.get("homeAway") == "away"), "")
+        home_abbr = next((t["team"]["abbreviation"] for t in teams if t.get("homeAway") == "home"), "")
+        away_abbr = next((t["team"]["abbreviation"] for t in teams if t.get("homeAway") == "away"), "")
+        games.append({"home": home, "away": away, "home_abbr": home_abbr, "away_abbr": away_abbr})
     return games
 
 
@@ -231,7 +233,11 @@ def main():
         print("No games found. Exiting.")
         return
     home_teams    = {g["home"] for g in games}
-    playing_teams = home_teams | {g["away"] for g in games}
+    # Build full name + abbreviation set so we can match PrizePicks (uses abbrs like "CHI")
+    playing_teams = (
+        {g["home"] for g in games} | {g["away"] for g in games} |
+        {g["home_abbr"] for g in games} | {g["away_abbr"] for g in games}
+    )
     print(f"  {len(games)} games: {', '.join(g['home'] + ' vs ' + g['away'] for g in games)}")
 
     # 2. PrizePicks lines — filter to players on teams actually playing today
@@ -242,8 +248,9 @@ def main():
         return
 
     def _team_plays_today(team_str: str) -> bool:
-        """True if any word in the PrizePicks team string matches a playing team name."""
-        parts = str(team_str).split()
+        """Match PrizePicks team string (abbr or full name) against today's playing teams."""
+        # PrizePicks uses formats like "CHI", "MEM", or "MEM/CHI" for double-headers
+        parts = str(team_str).replace("/", " ").split()
         return any(part in playing_teams for part in parts)
 
     before = len(lines_df)
