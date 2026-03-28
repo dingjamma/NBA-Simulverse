@@ -227,16 +227,26 @@ def main():
     if not games:
         print("No games found. Exiting.")
         return
-    home_teams = {g["home"] for g in games}
+    home_teams    = {g["home"] for g in games}
+    playing_teams = home_teams | {g["away"] for g in games}
     print(f"  {len(games)} games: {', '.join(g['home'] + ' vs ' + g['away'] for g in games)}")
 
-    # 2. PrizePicks lines
+    # 2. PrizePicks lines — filter to players on teams actually playing today
     print("\nFetching PrizePicks lines...")
     lines_df = get_prizepicks_lines()
     if lines_df.empty:
         print("No lines found. Exiting.")
         return
-    print(f"  {len(lines_df)} lines across {lines_df['name'].nunique()} players")
+
+    def _team_plays_today(team_str: str) -> bool:
+        """True if any word in the PrizePicks team string matches a playing team name."""
+        parts = str(team_str).split()
+        return any(part in playing_teams for part in parts)
+
+    before = len(lines_df)
+    lines_df = lines_df[lines_df["team"].apply(_team_plays_today)].reset_index(drop=True)
+    print(f"  {before} total lines -> {len(lines_df)} lines for today's games "
+          f"({lines_df['name'].nunique()} players)")
 
     # 3. Model setup
     device    = torch.device("cuda" if torch.cuda.is_available() else "cpu")
