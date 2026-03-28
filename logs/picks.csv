@@ -1,0 +1,4 @@
+date,player,stat,line,model_mean,model_p25,model_p75,edge,direction,result,actual
+2026-03-29,Ty Jerome,Points,21.5,13.16,12.86,13.66,-8.34,UNDER,,
+2026-03-29,Josh Giddey,Points,17.5,9.89,9.48,10.64,-7.61,UNDER,,
+2026-03-29,Josh Giddey,Assists,11.5,4.08,3.89,4.26,-7.42,UNDER,,
