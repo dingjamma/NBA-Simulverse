@@ -15,14 +15,18 @@ import requests
 
 from nba_gpt.config import DATA_CONFIG, INPUT_FEATURES
 
-_ESPN_BASE = "https://site.api.espn.com/apis"
-_SEARCH    = f"{_ESPN_BASE}/search/v2"
-_GAMELOG   = f"{_ESPN_BASE}/common/v3/sports/basketball/nba/athletes/{{athlete_id}}/gamelog"
-_ROSTER    = f"{_ESPN_BASE}/site/v2/sports/basketball/nba/teams/{{team}}/roster"
+_ESPN_BASE  = "https://site.api.espn.com/apis"
+_SEARCH     = f"{_ESPN_BASE}/search/v2"
+_GAMELOG    = f"{_ESPN_BASE}/common/v3/sports/basketball/nba/athletes/{{athlete_id}}/gamelog"
+_ROSTER     = f"{_ESPN_BASE}/site/v2/sports/basketball/nba/teams/{{team}}/roster"
+_STANDINGS  = "https://site.api.espn.com/apis/v2/sports/basketball/nba/standings"
 
 _HEADERS = {"User-Agent": "Mozilla/5.0"}
 _TIMEOUT = 20
 _SLEEP   = 0.5
+
+# In-process cache: {team_abbr: avg_pts_allowed}
+_DEF_RATING_CACHE: dict[str, float] = {}
 
 TARGET_ROLL = ["points", "reboundsTotal", "assists", "steals", "blocks", "threePointersMade"]
 
@@ -45,6 +49,32 @@ def _era_id(season_year: int) -> int:
         if season_year >= start:
             era = eid
     return era
+
+
+def get_team_def_ratings() -> dict[str, float]:
+    """
+    Return {team_abbr: avg_pts_allowed_per_game} for the current season.
+    Fetched once per process run from ESPN standings; falls back to 109.0.
+    """
+    global _DEF_RATING_CACHE
+    if _DEF_RATING_CACHE:
+        return _DEF_RATING_CACHE
+
+    try:
+        data = _get(_STANDINGS)
+        for conference in data.get("children", []):
+            for entry in conference.get("standings", {}).get("entries", []):
+                abbr = entry.get("team", {}).get("abbreviation", "")
+                if not abbr:
+                    continue
+                for stat in entry.get("stats", []):
+                    if stat.get("name") == "avgPointsAgainst":
+                        _DEF_RATING_CACHE[abbr] = float(stat["value"])
+                        break
+    except Exception as e:
+        print(f"  [def ratings] fetch failed ({e}), using league average")
+
+    return _DEF_RATING_CACHE
 
 
 def find_espn_athlete_id(player_name: str) -> tuple[int, str]:
@@ -116,8 +146,9 @@ def _parse_gamelog(data: dict, espn_id: int, season_year: int) -> pd.DataFrame:
         fg3_made, fg3_att = _split("3PT")
         ft_made, ft_att   = _split("FT")
 
-        at_vs = str(meta.get("atVs", "@"))
-        home  = 1.0 if "vs" in at_vs.lower() else 0.0
+        at_vs    = str(meta.get("atVs", "@"))
+        home     = 1.0 if "vs" in at_vs.lower() else 0.0
+        opp_abbr = meta.get("opponent", {}).get("abbreviation", "")
 
         rows.append({
             "gameDateTimeEst":     str(meta.get("gameDate", "")),
@@ -135,6 +166,7 @@ def _parse_gamelog(data: dict, espn_id: int, season_year: int) -> pd.DataFrame:
             "turnovers":           _float("TO"),
             "plusMinusPoints":     0.0,
             "home":                home,
+            "opp_abbr":            opp_abbr,
         })
 
     if not rows:
@@ -197,9 +229,12 @@ def fetch_player_live(
     # game_pace proxy: player FGA * 2
     df["game_pace"] = df["fieldGoalsAttempted"] * 2.0
 
-    # opp_pts_allowed_roll10: we don't have team defensive data from this endpoint.
-    # Use league average (109 pts/g) as baseline — override via ScenarioOverride if needed.
-    df["opp_pts_allowed_roll10"] = 109.0
+    # opp_pts_allowed_roll10: look up each opponent's season avg pts allowed.
+    def_ratings = get_team_def_ratings()
+    league_avg  = 109.0
+    df["opp_pts_allowed_roll10"] = df["opp_abbr"].map(
+        lambda abbr: def_ratings.get(abbr, league_avg)
+    )
 
     # personId (use ESPN id as surrogate)
     df["personId"] = espn_id
