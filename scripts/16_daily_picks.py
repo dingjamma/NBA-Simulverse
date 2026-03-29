@@ -204,10 +204,10 @@ def log_picks(picks: list[dict], game_date: str) -> None:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--top",  type=int, default=10, help="Number of top picks to log")
+    parser.add_argument("--top",  type=int, default=999, help="Max picks to log (default: unlimited)")
     parser.add_argument("--date", type=str, default=None,
                         help="Game date YYYYMMDD (default: today ET)")
-    parser.add_argument("--min-edge", type=float, default=3.0,
+    parser.add_argument("--min-edge", type=float, default=5.0,
                         help="Minimum |edge| to include a pick")
     args = parser.parse_args()
 
