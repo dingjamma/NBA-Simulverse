@@ -14,6 +14,8 @@ from pathlib import Path
 
 import requests
 
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+
 LOGS_DIR  = Path(__file__).parent.parent / "logs"
 PICKS_CSV = LOGS_DIR / "picks.csv"
 
@@ -121,10 +123,18 @@ def ask_qwen(question: str, context: str, think: bool = True) -> str:
         return f"ERROR: {e}"
 
 
-def interactive_mode(date_str: str) -> None:
-    picks   = load_picks(date_str)
-    context = format_picks_context(picks, date_str)
+def load_news_context(picks: list[dict]) -> str:
+    """Fetch player news/injury/form context — returns empty string on any error."""
+    try:
+        from live_feed.context_builder import build_picks_news_context
+        print("Fetching player news & injury context...")
+        return build_picks_news_context(picks)
+    except Exception as e:
+        return f"(News context unavailable: {e})"
 
+
+def _interactive_mode_with_context(date_str: str, context: str) -> None:
+    """Interactive loop using a pre-built context string."""
     print(f"\n{'='*60}")
     print(f"Sports GPT — {date_str}")
     print(f"Model: {MODEL}")
@@ -148,12 +158,26 @@ def interactive_mode(date_str: str) -> None:
         print()
 
 
+def interactive_mode(date_str: str, with_news: bool = True) -> None:
+    picks   = load_picks(date_str)
+    context = format_picks_context(picks, date_str)
+
+    if with_news and picks:
+        news_ctx = load_news_context(picks)
+        if news_ctx:
+            context = context + "\n\n" + news_ctx
+
+    _interactive_mode_with_context(date_str, context)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("question", nargs="?", default=None,
                         help="Question to ask (omit for interactive mode)")
     parser.add_argument("--date", default=None,
                         help="Date YYYY-MM-DD (default: today ET)")
+    parser.add_argument("--no-news", action="store_true",
+                        help="Skip fetching player news/injury context (faster)")
     args = parser.parse_args()
 
     if args.date:
@@ -165,11 +189,18 @@ def main():
     picks   = load_picks(date_str)
     context = format_picks_context(picks, date_str)
 
+    with_news = not args.no_news
+    if with_news and picks:
+        news_ctx = load_news_context(picks)
+        if news_ctx:
+            context = context + "\n\n" + news_ctx
+
     if args.question:
         print(f"\nQwen3.5: ", end="", flush=True)
         print(ask_qwen(args.question, context))
     else:
-        interactive_mode(date_str)
+        # Pass already-enriched context into interactive mode
+        _interactive_mode_with_context(date_str, context)
 
 
 if __name__ == "__main__":
