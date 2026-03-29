@@ -20,13 +20,35 @@ _SEARCH     = f"{_ESPN_BASE}/search/v2"
 _GAMELOG    = f"{_ESPN_BASE}/common/v3/sports/basketball/nba/athletes/{{athlete_id}}/gamelog"
 _ROSTER     = f"{_ESPN_BASE}/site/v2/sports/basketball/nba/teams/{{team}}/roster"
 _STANDINGS  = "https://site.api.espn.com/apis/v2/sports/basketball/nba/standings"
+_TEAMS      = f"{_ESPN_BASE}/site/v2/sports/basketball/nba/teams"
+_SUMMARY    = f"{_ESPN_BASE}/site/v2/sports/basketball/nba/summary"
+_SCHEDULE   = f"{_ESPN_BASE}/site/v2/sports/basketball/nba/teams/{{team_id}}/schedule"
 
 _HEADERS = {"User-Agent": "Mozilla/5.0"}
 _TIMEOUT = 20
 _SLEEP   = 0.5
 
-# In-process cache: {team_abbr: avg_pts_allowed}
-_DEF_RATING_CACHE: dict[str, float] = {}
+# In-process caches
+_DEF_RATING_CACHE: dict[str, float] = {}       # abbr -> season avg pts allowed
+_TEAM_ID_CACHE:    dict[str, str]   = {}       # abbr -> espn_team_id
+_POS_MAP_CACHE:    dict[str, str]   = {}       # str(espn_id) -> 'G'|'F'|'C'
+_POS_DEF_CACHE:    dict[str, dict]  = {}       # abbr -> {'G': float, 'F': float, 'C': float}
+
+# Disk cache paths (refresh daily)
+from datetime import date as _date
+_CACHE_DIR   = Path(__file__).parent.parent.parent / "cache"
+_POS_MAP_F   = _CACHE_DIR / "position_map.json"
+_POS_DEF_F   = _CACHE_DIR / f"pos_defense_{_date.today()}.json"
+
+_POS_LEAGUE_AVG = {"G": 12.0, "F": 10.5, "C": 10.0}  # fallback per position
+
+def _normalize_pos(raw: str) -> str:
+    """Map ESPN position abbreviation to G / F / C."""
+    raw = raw.upper()
+    if raw in ("PG", "SG", "G"):  return "G"
+    if raw in ("SF", "PF", "F"):  return "F"
+    if raw == "C":                return "C"
+    return ""
 
 TARGET_ROLL = ["points", "reboundsTotal", "assists", "steals", "blocks", "threePointersMade"]
 
@@ -75,6 +97,134 @@ def get_team_def_ratings() -> dict[str, float]:
         print(f"  [def ratings] fetch failed ({e}), using league average")
 
     return _DEF_RATING_CACHE
+
+
+def _get_team_ids() -> dict[str, str]:
+    """Return {abbr: espn_team_id} for all 30 NBA teams. Cached."""
+    global _TEAM_ID_CACHE
+    if _TEAM_ID_CACHE:
+        return _TEAM_ID_CACHE
+    try:
+        data = _get(_TEAMS)
+        for t in data.get("sports", [{}])[0].get("leagues", [{}])[0].get("teams", []):
+            team = t.get("team", {})
+            _TEAM_ID_CACHE[team.get("abbreviation", "")] = team.get("id", "")
+    except Exception:
+        pass
+    return _TEAM_ID_CACHE
+
+
+def _build_position_map() -> dict[str, str]:
+    """
+    Return {str(espn_athlete_id): 'G'|'F'|'C'} for all rostered NBA players.
+    Disk-cached (refreshed when cache file is missing); in-process cached after.
+    """
+    global _POS_MAP_CACHE
+    if _POS_MAP_CACHE:
+        return _POS_MAP_CACHE
+    # Load from disk if available
+    if _POS_MAP_F.exists():
+        with open(_POS_MAP_F) as f:
+            _POS_MAP_CACHE = json.load(f)
+        return _POS_MAP_CACHE
+    # Fetch all 30 rosters
+    print("  [pos map] Fetching all 30 rosters (one-time, cached)...")
+    team_ids = _get_team_ids()
+    for abbr, tid in team_ids.items():
+        try:
+            roster = _get(_ROSTER.format(team=tid))
+            for athlete in roster.get("athletes", []):
+                pid = str(athlete.get("id", ""))
+                raw = athlete.get("position", {}).get("abbreviation", "")
+                pos = _normalize_pos(raw)
+                if pid and pos:
+                    _POS_MAP_CACHE[pid] = pos
+        except Exception:
+            pass
+    _CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    with open(_POS_MAP_F, "w") as f:
+        json.dump(_POS_MAP_CACHE, f)
+    return _POS_MAP_CACHE
+
+
+def get_pos_defense(team_abbr: str, n_games: int = 10) -> dict[str, float]:
+    """
+    Return {'G': pts, 'F': pts, 'C': pts} — avg points allowed per player
+    by position for team_abbr over their last n_games.
+    Disk-cached daily; in-process cached after first call.
+    """
+    global _POS_DEF_CACHE
+    if team_abbr in _POS_DEF_CACHE:
+        return _POS_DEF_CACHE[team_abbr]
+    # Load today's disk cache
+    if _POS_DEF_F.exists():
+        with open(_POS_DEF_F) as f:
+            _POS_DEF_CACHE = json.load(f)
+        if team_abbr in _POS_DEF_CACHE:
+            return _POS_DEF_CACHE[team_abbr]
+
+    pos_map  = _build_position_map()
+    team_ids = _get_team_ids()
+    tid      = team_ids.get(team_abbr, "")
+    result   = dict(_POS_LEAGUE_AVG)
+
+    if not tid:
+        _POS_DEF_CACHE[team_abbr] = result
+        return result
+
+    try:
+        sched  = _get(_SCHEDULE.format(team_id=tid))
+        events = sched.get("events", [])
+        done   = [
+            e for e in events
+            if e.get("competitions", [{}])[0]
+                .get("status", {}).get("type", {}).get("completed", False)
+        ]
+        recent = done[-n_games:]
+
+        buckets: dict[str, list[float]] = {"G": [], "F": [], "C": []}
+
+        for event in recent:
+            gid = event.get("id", "")
+            try:
+                summary = _get(_SUMMARY, {"event": gid})
+                for team_box in summary.get("boxscore", {}).get("players", []):
+                    # We want the OPPOSING team's players (not tid)
+                    if team_box.get("team", {}).get("id") == tid:
+                        continue
+                    for stat_group in team_box.get("statistics", []):
+                        keys = stat_group.get("keys", [])
+                        if "points" not in keys:
+                            continue
+                        pts_idx = keys.index("points")
+                        for athlete in stat_group.get("athletes", []):
+                            pid   = str(athlete.get("athlete", {}).get("id", ""))
+                            stats = athlete.get("stats", [])
+                            if not stats or len(stats) <= pts_idx:
+                                continue
+                            try:
+                                pts = float(stats[pts_idx])
+                            except (ValueError, TypeError):
+                                continue
+                            pos = pos_map.get(pid, "")
+                            if pos in buckets:
+                                buckets[pos].append(pts)
+            except Exception:
+                continue
+
+        for pos, vals in buckets.items():
+            if vals:
+                result[pos] = float(np.mean(vals))
+
+    except Exception:
+        pass
+
+    _POS_DEF_CACHE[team_abbr] = result
+    # Persist to daily disk cache
+    _CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    with open(_POS_DEF_F, "w") as f:
+        json.dump(_POS_DEF_CACHE, f)
+    return result
 
 
 def find_espn_athlete_id(player_name: str) -> tuple[int, str]:
@@ -229,12 +379,21 @@ def fetch_player_live(
     # game_pace proxy: player FGA * 2
     df["game_pace"] = df["fieldGoalsAttempted"] * 2.0
 
-    # opp_pts_allowed_roll10: look up each opponent's season avg pts allowed.
+    # opp_pts_allowed_roll10: season avg pts allowed by opponent
     def_ratings = get_team_def_ratings()
     league_avg  = 109.0
     df["opp_pts_allowed_roll10"] = df["opp_abbr"].map(
         lambda abbr: def_ratings.get(abbr, league_avg)
     )
+
+    # opp_pts_allowed_to_pos: pts allowed by opponent to THIS player's position
+    pos_map      = _build_position_map()
+    player_pos   = pos_map.get(str(espn_id), "")
+    def _pos_def(abbr: str) -> float:
+        if not abbr or not player_pos:
+            return _POS_LEAGUE_AVG.get(player_pos, 10.5)
+        return get_pos_defense(abbr).get(player_pos, _POS_LEAGUE_AVG.get(player_pos, 10.5))
+    df["opp_pts_allowed_to_pos"] = df["opp_abbr"].map(_pos_def)
 
     # personId (use ESPN id as surrogate)
     df["personId"] = espn_id

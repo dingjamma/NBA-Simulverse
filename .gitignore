@@ -14,3 +14,4 @@ build/
 htmlcov/
 *.ipynb_checkpoints/
 *.log
+cache/
