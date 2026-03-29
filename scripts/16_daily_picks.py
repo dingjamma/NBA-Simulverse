@@ -1,8 +1,8 @@
 """
 Daily NBA picks pipeline.
 
-1. Get tomorrow's NBA games from ESPN
-2. Pull all player lines from PrizePicks
+1. Get today's NBA games from ESPN
+2. Pull all player lines from Underdog Fantasy
 3. Run NBA-GPT ensemble predictions for each player with a line
 4. Rank by edge (model - line), pick top N
 5. Log picks to logs/picks.csv
@@ -41,13 +41,13 @@ from nba_gpt.simulation.ensemble import EnsemblePredictor
 LOGS_DIR  = Path(__file__).parent.parent / "logs"
 PICKS_CSV = LOGS_DIR / "picks.csv"
 
-STAT_COL = {"Points": 0, "Rebounds": 1, "Assists": 2, "3-PT Made": 5}
+STAT_COL = {"Points": 0, "Rebounds": 1, "Assists": 2, "3-Pointers Made": 5}
 STAT_MAP  = {"Points": "points", "Rebounds": "reboundsTotal",
-             "Assists": "assists", "3-PT Made": "threePointersMade"}
+             "Assists": "assists", "3-Pointers Made": "threePointersMade"}
 
 ESPN_BASE  = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba"
-PP_API     = "https://api.prizepicks.com/projections"
-PP_HEADERS = {"User-Agent": "Mozilla/5.0"}
+UD_API     = "https://api.underdogfantasy.com/v1/over_under_lines"
+UD_HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 
 # ---------------------------------------------------------------------------
@@ -75,37 +75,64 @@ def get_games(date_str: str) -> list[dict]:
     return games
 
 
-def get_prizepicks_lines() -> pd.DataFrame:
-    """Fetch all active NBA PrizePicks lines. Returns DataFrame."""
-    r = requests.get(
-        PP_API,
-        params={"league_id": 7, "per_page": 250, "single_stat": "true"},
-        headers=PP_HEADERS,
-        timeout=15,
-    )
+def get_underdog_lines() -> pd.DataFrame:
+    """Fetch all active NBA Underdog Fantasy lines. Returns DataFrame."""
+    r = requests.get(UD_API, headers=UD_HEADERS, timeout=15)
     r.raise_for_status()
     data = r.json()
-    included = {x["id"]: x for x in data.get("included", [])}
+
+    # Build lookup maps
+    players     = {p["id"]: p for p in data.get("players", [])}
+    appearances = {a["id"]: a for a in data.get("appearances", [])}
+    games       = {g["id"]: g for g in data.get("games", [])}
 
     rows = []
-    for p in data.get("data", []):
-        attrs     = p.get("attributes", {})
-        stat      = attrs.get("stat_type", "")
-        line      = attrs.get("line_score")
-        if stat not in STAT_COL or line is None:
+    for line in data.get("over_under_lines", []):
+        if line.get("status") != "active":
             continue
-        pid = p.get("relationships", {}).get("new_player", {}).get("data", {}).get("id", "")
-        player = included.get(pid, {}).get("attributes", {})
-        name   = player.get("display_name", "")
-        team   = player.get("team", "")
+
+        ou        = line.get("over_under", {})
+        app_stat  = ou.get("appearance_stat", {})
+        stat      = app_stat.get("display_stat", "")
+        if stat not in STAT_COL:
+            continue
+
+        line_val    = line.get("stat_value")
+        if line_val is None:
+            continue
+
+        app_id  = app_stat.get("appearance_id", "")
+        app     = appearances.get(app_id, {})
+        player  = players.get(app.get("player_id", ""), {})
+
+        if player.get("sport_id") != "NBA":
+            continue
+
+        first = player.get("first_name", "")
+        last  = player.get("last_name", "")
+        name  = f"{first} {last}".strip()
         if not name:
             continue
-        rows.append({"name": name, "team": team, "stat": stat, "line": float(line)})
+
+        # Determine home/away from game record
+        match_id  = app.get("match_id")
+        game      = games.get(match_id, {})
+        team_id   = app.get("team_id", "")
+        is_home   = game.get("home_team_id") == team_id
+        game_abbr = game.get("abbreviated_title", "")  # e.g. "LAC @ MIL"
+
+        rows.append({
+            "name":     name,
+            "team":     game_abbr,
+            "is_home":  is_home,
+            "stat":     stat,
+            "line":     float(line_val),
+        })
 
     df = pd.DataFrame(rows)
     if df.empty:
         return df
-    # keep the middle line when multiple lines exist per player+stat
+    # keep one row per player+stat (Underdog sometimes has alternate lines)
     return (
         df.groupby(["name", "stat"])
         .apply(lambda g: g.iloc[len(g) // 2])
@@ -226,37 +253,21 @@ def main():
     print(f"NBA Daily Picks — {display_date}")
     print(f"{'='*60}")
 
-    # 1. Tomorrow's games
+    # 1. Today's games (used only for schedule printout now)
     print("\nFetching schedule...")
     games = get_games(game_date)
     if not games:
         print("No games found. Exiting.")
         return
-    home_teams    = {g["home"] for g in games}
-    # Build full name + abbreviation set so we can match PrizePicks (uses abbrs like "CHI")
-    playing_teams = (
-        {g["home"] for g in games} | {g["away"] for g in games} |
-        {g["home_abbr"] for g in games} | {g["away_abbr"] for g in games}
-    )
     print(f"  {len(games)} games: {', '.join(g['home'] + ' vs ' + g['away'] for g in games)}")
 
-    # 2. PrizePicks lines — filter to players on teams actually playing today
-    print("\nFetching PrizePicks lines...")
-    lines_df = get_prizepicks_lines()
+    # 2. Underdog Fantasy lines — already filtered to NBA, already have is_home flag
+    print("\nFetching Underdog Fantasy lines...")
+    lines_df = get_underdog_lines()
     if lines_df.empty:
         print("No lines found. Exiting.")
         return
-
-    def _team_plays_today(team_str: str) -> bool:
-        """Match PrizePicks team string (abbr or full name) against today's playing teams."""
-        # PrizePicks uses formats like "CHI", "MEM", or "MEM/CHI" for double-headers
-        parts = str(team_str).replace("/", " ").split()
-        return any(part in playing_teams for part in parts)
-
-    before = len(lines_df)
-    lines_df = lines_df[lines_df["team"].apply(_team_plays_today)].reset_index(drop=True)
-    print(f"  {before} total lines -> {len(lines_df)} lines for today's games "
-          f"({lines_df['name'].nunique()} players)")
+    print(f"  {len(lines_df)} lines ({lines_df['name'].nunique()} players)")
 
     # 3. Model setup
     device    = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -281,8 +292,8 @@ def main():
         if df is None:
             continue
 
-        # Determine home/away from team name fuzzy match
-        is_home = any(part in home_teams for part in row.get("team", "").split())
+        # is_home already embedded by get_underdog_lines()
+        is_home = bool(row.get("is_home", False))
 
         try:
             samples = run_prediction(df, norm_stats, predictor, is_home, device)
