@@ -54,7 +54,8 @@ UD_HEADERS = {"User-Agent": "Mozilla/5.0"}
 # Data helpers
 # ---------------------------------------------------------------------------
 
-BLOWOUT_THRESHOLD = 12.0  # absolute spread points
+BLOWOUT_THRESHOLD = 12.0  # spread >= this → blowout, force UNDER
+EVEN_THRESHOLD    = 4.0   # spread <= this → even game, force OVER
 
 
 def get_games(date_str: str) -> list[dict]:
@@ -216,7 +217,7 @@ def run_prediction(
 PICKS_COLS = [
     "date", "player", "stat", "line",
     "model_mean", "model_p25", "model_p75", "edge", "direction",
-    "blowout",
+    "blowout", "even_game",
     "result", "actual",   # filled in later by results script
 ]
 
@@ -240,6 +241,7 @@ def log_picks(picks: list[dict], game_date: str) -> None:
                 "edge":       round(pick["edge"], 2),
                 "direction":  pick["direction"],
                 "blowout":    pick.get("blowout", False),
+                "even_game":  pick.get("even_game", False),
                 "result":     "",
                 "actual":     "",
             })
@@ -281,7 +283,12 @@ def main():
         print("No games found. Exiting.")
         return
     for g in games:
-        flag = " [BLOWOUT RISK]" if g["spread"] >= BLOWOUT_THRESHOLD else ""
+        if g["spread"] >= BLOWOUT_THRESHOLD:
+            flag = " [BLOWOUT]"
+        elif g["spread"] <= EVEN_THRESHOLD:
+            flag = " [EVEN]"
+        else:
+            flag = ""
         print(f"  {g['away']} @ {g['home']}  spread={g['spread']:.1f}{flag}")
 
     # Build abbr -> spread lookup from ESPN games
@@ -330,6 +337,7 @@ def main():
         abbrs     = [p.strip() for p in game_str.replace("@", " ").split() if p.strip()]
         spread    = spread_lookup.get(frozenset(abbrs), 0.0)
         blowout   = spread >= BLOWOUT_THRESHOLD
+        even_game = spread <= EVEN_THRESHOLD
 
         try:
             samples = run_prediction(df, norm_stats, predictor, is_home, device)
@@ -339,8 +347,13 @@ def main():
             p75     = float(np.percentile(col, 75))
             edge    = mean - line
 
-            # Blowout games: always bet UNDER regardless of model direction
-            direction = "UNDER" if blowout else ("OVER" if edge > 0 else "UNDER")
+            # Spread-adjusted direction override
+            if blowout:
+                direction = "UNDER"       # starters sit, stats depressed
+            elif even_game:
+                direction = "OVER"        # full minutes, both teams pushing
+            else:
+                direction = "OVER" if edge > 0 else "UNDER"  # trust model
 
             if abs(edge) >= args.min_edge:
                 all_edges.append({
@@ -353,6 +366,7 @@ def main():
                     "edge":       edge,
                     "direction":  direction,
                     "blowout":    blowout,
+                    "even_game":  even_game,
                 })
         except Exception as e:
             print(f"    [{name} {stat}] predict error: {e}")
@@ -372,7 +386,7 @@ def main():
     print(f"  {'#':<3} {'Player':<24} {'Stat':<12} {'Line':>6}  {'Model':>7}  {'Edge':>7}  BET")
     print(f"  {'-'*68}")
     for i, p in enumerate(top_picks, 1):
-        blowout_flag = " [BLOWOUT]" if p.get("blowout") else ""
+        blowout_flag = " [BLOWOUT]" if p.get("blowout") else (" [EVEN]" if p.get("even_game") else "")
         print(f"  {i:<3} {p['player']:<24} {p['stat']:<12} {p['line']:>6.1f}  "
               f"{p['model_mean']:>7.1f}  {p['edge']:>+7.1f}  {p['direction']}{blowout_flag}")
 

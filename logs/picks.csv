@@ -1,7 +1,7 @@
-date,player,stat,line,model_mean,model_p25,model_p75,edge,direction,blowout,result,actual
-2026-03-29,Peyton Watson,Points,11.5,20.38,19.47,21.16,8.88,OVER,False,,
-2026-03-29,Andrew Wiggins,Points,11.5,18.03,17.96,18.49,6.53,OVER,False,,
-2026-03-29,Isaiah Hartenstein,Points,7.5,13.69,13.33,14.03,6.19,OVER,False,,
-2026-03-29,Mikal Bridges,Points,12.5,18.5,18.07,18.98,6.0,OVER,False,,
-2026-03-29,Brook Lopez,Points,9.5,14.87,14.63,15.26,5.37,OVER,False,,
-2026-03-29,Deni Avdija,Points,25.5,20.15,20.03,20.64,-5.35,UNDER,False,,
+date,player,stat,line,model_mean,model_p25,model_p75,edge,direction,blowout,even_game,result,actual
+2026-03-29,Peyton Watson,Points,11.5,20.38,19.47,21.16,8.88,OVER,False,False,,
+2026-03-29,Andrew Wiggins,Points,11.5,18.03,17.96,18.49,6.53,OVER,False,False,,
+2026-03-29,Isaiah Hartenstein,Points,7.5,13.69,13.33,14.03,6.19,OVER,False,False,,
+2026-03-29,Mikal Bridges,Points,12.5,18.5,18.07,18.98,6.0,OVER,False,False,,
+2026-03-29,Brook Lopez,Points,9.5,14.87,14.63,15.26,5.37,OVER,False,False,,
+2026-03-29,Deni Avdija,Points,25.5,20.15,20.03,20.64,-5.35,UNDER,False,False,,
