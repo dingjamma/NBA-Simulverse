@@ -54,8 +54,11 @@ UD_HEADERS = {"User-Agent": "Mozilla/5.0"}
 # Data helpers
 # ---------------------------------------------------------------------------
 
+BLOWOUT_THRESHOLD = 12.0  # absolute spread points
+
+
 def get_games(date_str: str) -> list[dict]:
-    """Return list of {home, away, home_abbr, away_abbr} for date_str (YYYYMMDD)."""
+    """Return list of {home, away, home_abbr, away_abbr, spread} for date_str (YYYYMMDD)."""
     r = requests.get(
         f"{ESPN_BASE}/scoreboard",
         params={"dates": date_str},
@@ -71,7 +74,22 @@ def get_games(date_str: str) -> list[dict]:
         away      = next((t["team"]["displayName"]  for t in teams if t.get("homeAway") == "away"), "")
         home_abbr = next((t["team"]["abbreviation"] for t in teams if t.get("homeAway") == "home"), "")
         away_abbr = next((t["team"]["abbreviation"] for t in teams if t.get("homeAway") == "away"), "")
-        games.append({"home": home, "away": away, "home_abbr": home_abbr, "away_abbr": away_abbr})
+
+        # Extract spread from ESPN odds if available
+        spread = 0.0
+        odds_list = comps.get("odds", [])
+        if odds_list:
+            raw = odds_list[0].get("spread", "0") or "0"
+            try:
+                spread = abs(float(str(raw).replace("±", "").strip()))
+            except ValueError:
+                spread = 0.0
+
+        games.append({
+            "home": home, "away": away,
+            "home_abbr": home_abbr, "away_abbr": away_abbr,
+            "spread": spread,
+        })
     return games
 
 
@@ -122,11 +140,12 @@ def get_underdog_lines() -> pd.DataFrame:
         game_abbr = game.get("abbreviated_title", "")  # e.g. "LAC @ MIL"
 
         rows.append({
-            "name":     name,
-            "team":     game_abbr,
-            "is_home":  is_home,
-            "stat":     stat,
-            "line":     float(line_val),
+            "name":      name,
+            "team":      game_abbr,
+            "is_home":   is_home,
+            "stat":      stat,
+            "line":      float(line_val),
+            "match_id":  match_id,
         })
 
     df = pd.DataFrame(rows)
@@ -197,6 +216,7 @@ def run_prediction(
 PICKS_COLS = [
     "date", "player", "stat", "line",
     "model_mean", "model_p25", "model_p75", "edge", "direction",
+    "blowout",
     "result", "actual",   # filled in later by results script
 ]
 
@@ -219,6 +239,7 @@ def log_picks(picks: list[dict], game_date: str) -> None:
                 "model_p75":  round(pick["model_p75"],  2),
                 "edge":       round(pick["edge"], 2),
                 "direction":  pick["direction"],
+                "blowout":    pick.get("blowout", False),
                 "result":     "",
                 "actual":     "",
             })
@@ -253,13 +274,22 @@ def main():
     print(f"NBA Daily Picks — {display_date}")
     print(f"{'='*60}")
 
-    # 1. Today's games (used only for schedule printout now)
+    # 1. Today's games + spreads
     print("\nFetching schedule...")
     games = get_games(game_date)
     if not games:
         print("No games found. Exiting.")
         return
-    print(f"  {len(games)} games: {', '.join(g['home'] + ' vs ' + g['away'] for g in games)}")
+    for g in games:
+        flag = " [BLOWOUT RISK]" if g["spread"] >= BLOWOUT_THRESHOLD else ""
+        print(f"  {g['away']} @ {g['home']}  spread={g['spread']:.1f}{flag}")
+
+    # Build abbr -> spread lookup from ESPN games
+    # key: frozenset of both team abbrs so we can match from either side
+    spread_lookup: dict[frozenset, float] = {
+        frozenset([g["home_abbr"], g["away_abbr"]]): g["spread"]
+        for g in games
+    }
 
     # 2. Underdog Fantasy lines — already filtered to NBA, already have is_home flag
     print("\nFetching Underdog Fantasy lines...")
@@ -295,6 +325,12 @@ def main():
         # is_home already embedded by get_underdog_lines()
         is_home = bool(row.get("is_home", False))
 
+        # Blowout risk: match game abbrs from team string e.g. "LAC @ MIL"
+        game_str  = str(row.get("team", ""))
+        abbrs     = [p.strip() for p in game_str.replace("@", " ").split() if p.strip()]
+        spread    = spread_lookup.get(frozenset(abbrs), 0.0)
+        blowout   = spread >= BLOWOUT_THRESHOLD
+
         try:
             samples = run_prediction(df, norm_stats, predictor, is_home, device)
             col     = samples[:, STAT_COL[stat]]
@@ -302,6 +338,9 @@ def main():
             p25     = float(np.percentile(col, 25))
             p75     = float(np.percentile(col, 75))
             edge    = mean - line
+
+            # Blowout games: always bet UNDER regardless of model direction
+            direction = "UNDER" if blowout else ("OVER" if edge > 0 else "UNDER")
 
             if abs(edge) >= args.min_edge:
                 all_edges.append({
@@ -312,7 +351,8 @@ def main():
                     "model_p25":  p25,
                     "model_p75":  p75,
                     "edge":       edge,
-                    "direction":  "OVER" if edge > 0 else "UNDER",
+                    "direction":  direction,
+                    "blowout":    blowout,
                 })
         except Exception as e:
             print(f"    [{name} {stat}] predict error: {e}")
@@ -330,10 +370,11 @@ def main():
     print(f"TOP {args.top} PICKS — {display_date}")
     print(f"{'='*60}")
     print(f"  {'#':<3} {'Player':<24} {'Stat':<12} {'Line':>6}  {'Model':>7}  {'Edge':>7}  BET")
-    print(f"  {'-'*65}")
+    print(f"  {'-'*68}")
     for i, p in enumerate(top_picks, 1):
+        blowout_flag = " [BLOWOUT]" if p.get("blowout") else ""
         print(f"  {i:<3} {p['player']:<24} {p['stat']:<12} {p['line']:>6.1f}  "
-              f"{p['model_mean']:>7.1f}  {p['edge']:>+7.1f}  {p['direction']}")
+              f"{p['model_mean']:>7.1f}  {p['edge']:>+7.1f}  {p['direction']}{blowout_flag}")
 
     print(f"\n  Parlay all {args.top}: {' + '.join(p['player'].split()[0] + ' ' + p['stat'] + ' ' + p['direction'] for p in top_picks)}")
 

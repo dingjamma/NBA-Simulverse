@@ -20,10 +20,11 @@ ESPN_BASE = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba"
 ESPN_HDR  = {"User-Agent": "Mozilla/5.0"}
 
 STAT_MAP = {
-    "Points":    "points",
-    "Rebounds":  "rebounds",
-    "Assists":   "assists",
-    "3-PT Made": "threePointFieldGoalsMade",
+    "Points":          "points",
+    "Rebounds":        "rebounds",
+    "Assists":         "assists",
+    "3-PT Made":       "threePointFieldGoalsMade",
+    "3-Pointers Made": "threePointFieldGoalsMade",
 }
 
 
